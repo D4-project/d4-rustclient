@@ -5,10 +5,16 @@ Very basic and non functional rust client (WiP)
 
 `cargo build`
 
+# Help
+
+```
+cargo run -- -h
+```
+
 # Usage
 
 ```
-$  echo "blahh" | cargo run | xxd
+$  echo "blahh" | cargo run -- -c <config_directory> | xxd
     Finished dev [unoptimized + debuginfo] target(s) in 0.01s
      Running `target/debug/d4-rustclient`
 00000000: 0101 388b 27e2 92b5 41ea 8469 a609 097a  ..8.'...A..i...z
