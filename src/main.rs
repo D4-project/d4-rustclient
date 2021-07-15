@@ -1,13 +1,14 @@
-use std::time::{SystemTime, UNIX_EPOCH, SystemTimeError};
-use std::io::{self, Read, Write};
 use std::error::Error;
+use std::fs::File;
+use std::io::{self, Read, Write};
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH, SystemTimeError};
 
-use uuid::Uuid;
+use hmac::{Hmac, NewMac, Mac};
 use serde::{Serialize, Serializer, Deserialize};
 use serde::ser::SerializeStruct;
-
 use sha2::Sha256;
-use hmac::{Hmac, NewMac, Mac};
+use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -71,13 +72,31 @@ fn create_message(protocol_version: u8, packet_type: u8, sensor_uuid: &[u8; 16],
     Ok(d4_message)
 }
 
+fn read_config_file(path: &Path) -> String {
+    let mut file = match File::open(&path) {
+        Err(why) => panic!("couldn't open {}: {}", path.display(), why),
+        Ok(file) => file,
+    };
+    let mut s = String::new();
+    match file.read_to_string(&mut s) {
+        Err(why) => panic!("couldn't read {}: {}", path.display(), why),
+        Ok(_) => (),
+    }
+    s.trim().to_string()
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let sensor_uuid = Uuid::new_v4();
-    // let sensor_uuid = Uuid::parse_str("cd980d75-dcf1-47da-bb60-aabe94fea6b2")?;
-    let key = b"private key to change";
-    let protocol_version = 1;
-    let packet_type = 1;
+    let u = read_config_file(Path::new("conf.sample/uuid"));
+    let sensor_uuid = Uuid::parse_str(&u)?;
+
+    let key = read_config_file(Path::new("conf.sample/key"));
+
+    let v = read_config_file(Path::new("conf.sample/version"));
+    let protocol_version = v.parse::<u8>().unwrap();
+
+    let t = read_config_file(Path::new("conf.sample/type"));
+    let packet_type = t.parse::<u8>().unwrap();
+
 
     let mut message = Vec::new();
     let stdin = io::stdin();
@@ -85,7 +104,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     handle.read_to_end(&mut message)?;
 
-    let message = create_message(protocol_version, packet_type, sensor_uuid.as_bytes(), key, message)?;
+    let message = create_message(protocol_version, packet_type,
+                                 sensor_uuid.as_bytes(),
+                                 key.as_bytes(), message)?;
     let encoded = bincode::serialize(&message).unwrap();
 
     let stdout = io::stdout();
