@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
@@ -7,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH, SystemTimeError};
 use clap::{Arg, App};
 use hmac::{Hmac, NewMac, Mac};
 use serde::{Serialize, Serializer, Deserialize};
+use serde::de::{self, Deserializer, Visitor, SeqAccess};
 use serde::ser::SerializeStruct;
 use sha2::Sha256;
 use uuid::Uuid;
@@ -29,6 +31,12 @@ struct D4Message {
     data: Vec<u8>,
 }
 
+impl D4Message {
+	fn new (header: D4Header, data: Vec<u8>) -> D4Message{
+		D4Message {header: header, data: data}
+	}
+}
+
 
 impl Serialize for D4Message {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -41,6 +49,41 @@ impl Serialize for D4Message {
 	        state.serialize_field("data", v)?;
 		}
         state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for D4Message {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+		enum Message { Header, Data }
+
+        struct D4MessageVisitor;
+
+        impl<'de> Visitor<'de> for D4MessageVisitor {
+            type Value = D4Message;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct D4Message")
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<D4Message, V::Error>
+            where
+                V: SeqAccess<'de>,
+            {
+                let header = seq.next_element::<D4Header>()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+				let data: Vec<u8> = seq.next_element::<[u8; 6]>()?
+					.ok_or_else(|| de::Error::invalid_length(1, &self))?.into();
+                Ok(D4Message::new(header, data))
+            }
+        }
+
+        const FIELDS: &'static [&'static str] = &["header", "data"];
+        deserializer.deserialize_struct("D4Message", FIELDS, D4MessageVisitor)
     }
 }
 
@@ -86,6 +129,7 @@ fn read_config_file(path: &Path) -> String {
     s.trim().to_string()
 }
 
+
 fn main() -> Result<(), Box<dyn Error>> {
 
 	let matches = App::new("d4 - d4 client")
@@ -124,6 +168,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                                  sensor_uuid.as_bytes(),
                                  key.as_bytes(), message)?;
     let encoded = bincode::serialize(&message).unwrap();
+
+	let decoded: D4Message = bincode::deserialize(&encoded).unwrap();
+
+	println!("{:?}", message);
+	println!("{:?}", decoded);
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
