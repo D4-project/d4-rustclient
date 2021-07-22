@@ -32,9 +32,9 @@ struct D4Message {
 }
 
 impl D4Message {
-	fn new (header: D4Header, data: Vec<u8>) -> D4Message{
-		D4Message {header: header, data: data}
-	}
+    fn new (header: D4Header, data: Vec<u8>) -> D4Message{
+        D4Message {header: header, data: data}
+    }
 }
 
 
@@ -45,9 +45,9 @@ impl Serialize for D4Message {
     {
         let mut state = serializer.serialize_struct("D4Message", 2)?;
         state.serialize_field("header", &self.header)?;
-		for v in &self.data {
-	        state.serialize_field("data", v)?;
-		}
+        for v in &self.data {
+            state.serialize_field("data", v)?;
+        }
         state.end()
     }
 }
@@ -59,7 +59,7 @@ impl<'de> Deserialize<'de> for D4Message {
     {
         #[derive(Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
-		enum Message { Header, Data }
+        enum Message { Header, Data }
 
         struct D4MessageVisitor;
 
@@ -76,8 +76,8 @@ impl<'de> Deserialize<'de> for D4Message {
             {
                 let header = seq.next_element::<D4Header>()?
                     .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-				let data: Vec<u8> = seq.next_element::<[u8; 6]>()?
-					.ok_or_else(|| de::Error::invalid_length(1, &self))?.into();
+                let data: Vec<u8> = seq.next_element::<[u8; 6]>()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?.into();
                 Ok(D4Message::new(header, data))
             }
         }
@@ -132,7 +132,7 @@ fn read_config_file(path: &Path) -> String {
 
 fn main() -> Result<(), Box<dyn Error>> {
 
-	let matches = App::new("d4 - d4 client")
+    let matches = App::new("d4 - d4 client")
         .version("0.1.0")
         .author("D4 team")
         .about("Read data from <stdin> and send it to <stdout>")
@@ -143,8 +143,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                  .help("The configuration directory"))
         .get_matches();
 
-	let config_dir = matches.value_of("config-directory").unwrap_or("conf.sample");
-	let config_dir_path = Path::new(config_dir);
+    let config_dir = matches.value_of("config-directory").unwrap_or("conf.sample");
+    let config_dir_path = Path::new(config_dir);
 
     let u = read_config_file(&config_dir_path.join("uuid"));
     let sensor_uuid = Uuid::parse_str(&u)?;
@@ -169,10 +169,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                                  key.as_bytes(), message)?;
     let encoded = bincode::serialize(&message).unwrap();
 
-	let decoded: D4Message = bincode::deserialize(&encoded).unwrap();
+    let decoded: D4Message = bincode::deserialize(&encoded).unwrap();
 
-	println!("{:?}", message);
-	println!("{:?}", decoded);
+    println!("{:?}", message);
+    println!("{:?}", decoded);
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
