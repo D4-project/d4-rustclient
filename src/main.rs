@@ -1,5 +1,5 @@
+use std::convert::AsMut;
 use std::error::Error;
-use std::fmt;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
@@ -7,15 +7,22 @@ use std::time::{SystemTime, UNIX_EPOCH, SystemTimeError};
 
 use clap::{Arg, App};
 use hmac::{Hmac, NewMac, Mac};
-use serde::{Serialize, Serializer, Deserialize};
-use serde::de::{self, Deserializer, Visitor, SeqAccess};
-use serde::ser::SerializeStruct;
 use sha2::Sha256;
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
 
-#[derive(Serialize, Deserialize, Debug)]
+fn clone_into_array<A, T>(slice: &[T]) -> A
+where
+    A: Default + AsMut<[T]>,
+    T: Clone,
+{
+    let mut a = A::default();
+    <A as AsMut<[T]>>::as_mut(&mut a).clone_from_slice(slice);
+    a
+}
+
+#[derive(Debug)]
 struct D4Header {
     protocol_version: u8,
     packet_type: u8,
@@ -25,75 +32,66 @@ struct D4Header {
     size: u32,
 }
 
+impl D4Header {
+
+    fn to_vec(&mut self) -> Vec<u8> {
+        let mut to_return: Vec<u8> = Vec::new();
+        to_return.push(self.protocol_version);
+        to_return.push(self.packet_type);
+        to_return.extend_from_slice(&self.uuid);
+        let mut timestamp = bincode::serialize(&self.timestamp).unwrap();
+        to_return.append(&mut timestamp);
+        to_return.extend_from_slice(&self.hmac);
+        let mut size = bincode::serialize(&self.size).unwrap();
+        to_return.append(&mut size);
+        to_return
+    }
+}
+
+impl From<Vec<u8>> for D4Header {
+    fn from(data: Vec<u8> ) -> Self {
+        D4Header {
+            protocol_version: data[0],
+            packet_type: data[1],
+            uuid: clone_into_array(&data[2..18]),
+            timestamp: bincode::deserialize(&data[18..26]).unwrap(),
+            hmac: clone_into_array(&data[26..58]),
+            size: bincode::deserialize(&data[58..62]).unwrap()
+        }
+    }
+}
+
+
 #[derive(Debug)]
 struct D4Message {
     header: D4Header,
-    data: Vec<u8>,
-}
-
-impl D4Message {
-    fn new (header: D4Header, data: Vec<u8>) -> D4Message{
-        D4Message {header: header, data: data}
-    }
+    body: Vec<u8>,
 }
 
 
-impl Serialize for D4Message {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut state = serializer.serialize_struct("D4Message", 2)?;
-        state.serialize_field("header", &self.header)?;
-        for v in &self.data {
-            state.serialize_field("data", v)?;
+impl From<Vec<u8>> for D4Message {
+    fn from(data: Vec<u8> ) -> Self {
+        D4Message {
+            header: data[0..62].to_vec().into(),
+            body: data[62..].to_vec().into()
         }
-        state.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for D4Message {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
-        enum Message { Header, Data }
-
-        struct D4MessageVisitor;
-
-        impl<'de> Visitor<'de> for D4MessageVisitor {
-            type Value = D4Message;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("struct D4Message")
-            }
-
-            fn visit_seq<V>(self, mut seq: V) -> Result<D4Message, V::Error>
-            where
-                V: SeqAccess<'de>,
-            {
-                let header = seq.next_element::<D4Header>()?
-                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-                let data: Vec<u8> = seq.next_element::<[u8; 6]>()?
-                    .ok_or_else(|| de::Error::invalid_length(1, &self))?.into();
-                Ok(D4Message::new(header, data))
-            }
-        }
-
-        const FIELDS: &'static [&'static str] = &["header", "data"];
-        deserializer.deserialize_struct("D4Message", FIELDS, D4MessageVisitor)
     }
 }
 
 impl D4Message {
     fn compute_hmac(&mut self, secret_key: &[u8]) {
         let mut mac = HmacSha256::new_from_slice(secret_key).expect("HMAC can take key of any size");
-        mac.update(&bincode::serialize(&self).unwrap());
+        mac.update(self.to_vec().as_slice());
         let result = mac.finalize();
         self.header.hmac = result.into_bytes().into();
     }
+
+    fn to_vec(&mut self) -> Vec<u8> {
+        let mut to_return: Vec<u8> = self.header.to_vec();
+        to_return.append(&mut self.body.to_owned());
+        to_return
+    }
+
 }
 
 fn create_message(protocol_version: u8, packet_type: u8, sensor_uuid: &[u8; 16],
@@ -110,7 +108,7 @@ fn create_message(protocol_version: u8, packet_type: u8, sensor_uuid: &[u8; 16],
     };
     let mut d4_message = D4Message {
         header: header,
-        data: message
+        body: message
     };
     d4_message.compute_hmac(key);
     Ok(d4_message)
@@ -158,25 +156,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     let packet_type = t.parse::<u8>().unwrap();
 
 
-    let mut message = Vec::new();
+    let mut stdin_message = Vec::new();
     let stdin = io::stdin();
     let mut handle = stdin.lock();
 
-    handle.read_to_end(&mut message)?;
+    handle.read_to_end(&mut stdin_message)?;
 
-    let message = create_message(protocol_version, packet_type,
+    let mut message = create_message(protocol_version, packet_type,
                                  sensor_uuid.as_bytes(),
-                                 key.as_bytes(), message)?;
-    let encoded = bincode::serialize(&message).unwrap();
+                                 key.as_bytes(), stdin_message)?;
+    let encoded: Vec<u8> = message.to_vec();
 
-    let decoded: D4Message = bincode::deserialize(&encoded).unwrap();
-
-    println!("{:?}", message);
-    println!("{:?}", decoded);
+    //println!("{:?}", message);
+    println!("{:?}", encoded);
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
     handle.write_all(encoded.as_slice())?;
+
+    let decoded: D4Message = encoded.into();
+    println!("{:?}", decoded);
 
     Ok(())
 }
