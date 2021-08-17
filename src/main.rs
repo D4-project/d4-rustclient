@@ -32,6 +32,17 @@ struct D4Header {
     size: u32,
 }
 
+impl PartialEq for D4Header {
+    fn eq(&self, other: &Self) -> bool {
+        (self.protocol_version == other.protocol_version)
+        & (self.packet_type == other.packet_type)
+        & (self.uuid == other.uuid)
+        & (self.timestamp == other.timestamp)
+        & (self.hmac == other.hmac)
+        & (self.size == other.size)
+    }
+}
+
 impl From<D4Header> for Vec<u8> {
     fn from(header: D4Header) -> Self {
         let mut to_return: Vec<u8> = Vec::new();
@@ -65,6 +76,13 @@ impl From<Vec<u8>> for D4Header {
 struct D4Message {
     header: D4Header,
     body: Vec<u8>,
+}
+
+impl PartialEq for D4Message {
+    fn eq(&self, other: &Self) -> bool {
+        (self.header == other.header)
+        & (self.body == other.body)
+    }
 }
 
 impl From<D4Message> for Vec<u8> {
@@ -126,6 +144,31 @@ fn read_config_file(path: &Path) -> String {
     s.trim().to_string()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_decode() {
+        let protocol_version = 1;
+        let packet_type = 1;
+        let sensor_uuid = Uuid::new_v4();
+        let key = String::from("My Hmac key");
+        let message = String::from("blah");
+
+        match create_message(protocol_version, packet_type,
+                                     sensor_uuid.as_bytes(),
+                                     key.as_bytes(), Vec::from(message)){
+            Err(why) => panic!("{:?}", why),
+            Ok(message) => {
+                let encoded: Vec<u8> = Vec::from(message.to_owned());
+                let decoded: D4Message = D4Message::from(encoded);
+                assert_eq!(message, decoded);
+            }
+        }
+    }
+}
+
 
 fn main() -> Result<(), Box<dyn Error>> {
 
@@ -164,17 +207,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let message = create_message(protocol_version, packet_type,
                                  sensor_uuid.as_bytes(),
                                  key.as_bytes(), stdin_message)?;
-    // println!("{:?}", message);
     let encoded: Vec<u8> = Vec::from(message);
 
-    //println!("{:?}", encoded);
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
     handle.write_all(encoded.as_slice())?;
-
-    let decoded: D4Message = D4Message::from(encoded);
-    //println!("{:?}", decoded);
 
     Ok(())
 }
