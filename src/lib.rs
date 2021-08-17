@@ -2,6 +2,7 @@ use std::convert::AsMut;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use hmac::{Hmac, NewMac, Mac};
+use hmac::crypto_mac::MacError;
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -102,6 +103,15 @@ impl D4Message {
         self.header.hmac = result.into_bytes().into();
     }
 
+    pub fn validate_hmac(&mut self, secret_key: &[u8]) -> Result<(), MacError> {
+        let mut mac = HmacSha256::new_from_slice(secret_key).expect("HMAC can take key of any size");
+        let mut message = self.to_owned();
+        let code_bytes: [u8; 32] = message.header.hmac;
+        message.header.hmac = [0; 32];
+        mac.update(Vec::from(message).as_slice());
+        mac.verify(&code_bytes)
+    }
+
     pub fn new(protocol_version: u8, packet_type: u8, sensor_uuid: &[u8; 16],
                key: &[u8], message: Vec<u8>) -> Self {
         let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -127,6 +137,38 @@ impl D4Message {
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    #[test]
+    fn validate_error() {
+        let protocol_version = 1;
+        let packet_type = 1;
+        let sensor_uuid = Uuid::new_v4();
+        let key = String::from("My Hmac key");
+        let message = String::from("blah");
+
+        let mut message = D4Message::new(protocol_version, packet_type,
+                                     sensor_uuid.as_bytes(),
+                                     key.as_bytes(), Vec::from(message));
+        message.body.push(1);
+        assert_eq!(message.validate_hmac(key.as_bytes()), Err(MacError));
+    }
+
+    #[test]
+    fn validate() {
+        let protocol_version = 1;
+        let packet_type = 1;
+        let sensor_uuid = Uuid::new_v4();
+        let key = String::from("My Hmac key");
+        let message = String::from("blah");
+
+        let mut message = D4Message::new(protocol_version, packet_type,
+                                     sensor_uuid.as_bytes(),
+                                     key.as_bytes(), Vec::from(message));
+        assert_eq!(message.validate_hmac(key.as_bytes()), Ok(()));
+        let encoded: Vec<u8> = Vec::from(message.to_owned());
+        let mut decoded: D4Message = D4Message::from(encoded);
+        assert_eq!(decoded.validate_hmac(key.as_bytes()), Ok(()));
+    }
 
     #[test]
     fn encode_decode() {
