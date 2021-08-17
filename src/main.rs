@@ -45,15 +45,13 @@ impl PartialEq for D4Header {
 
 impl From<D4Header> for Vec<u8> {
     fn from(header: D4Header) -> Self {
-        let mut to_return: Vec<u8> = Vec::new();
+        let mut to_return: Vec<u8> = Vec::with_capacity(62);
         to_return.push(header.protocol_version);
         to_return.push(header.packet_type);
-        to_return.extend_from_slice(&header.uuid);
-        let mut timestamp = bincode::serialize(&header.timestamp).unwrap();
-        to_return.append(&mut timestamp);
-        to_return.extend_from_slice(&header.hmac);
-        let mut size = bincode::serialize(&header.size).unwrap();
-        to_return.append(&mut size);
+        to_return.extend(&header.uuid);
+        to_return.extend(&bincode::serialize(&header.timestamp).unwrap());
+        to_return.extend(&header.hmac);
+        to_return.extend(&bincode::serialize(&header.size).unwrap());
         to_return
     }
 }
@@ -88,7 +86,7 @@ impl PartialEq for D4Message {
 impl From<D4Message> for Vec<u8> {
     fn from(message: D4Message) -> Self {
         let mut to_return: Vec<u8> = Vec::from(message.header);
-        to_return.append(&mut message.body.to_owned());
+        to_return.extend(&message.body.to_owned());
         to_return
     }
 }
@@ -96,8 +94,8 @@ impl From<D4Message> for Vec<u8> {
 impl From<Vec<u8>> for D4Message {
     fn from(data: Vec<u8>) -> Self {
         D4Message {
-            header: data[0..62].to_vec().into(),
-            body: data[62..].to_vec().into()
+            header: D4Header::from(data[0..62].to_vec()),
+            body: data[62..].to_vec()
         }
     }
 }
