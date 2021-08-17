@@ -22,7 +22,7 @@ where
     a
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 struct D4Header {
     protocol_version: u8,
     packet_type: u8,
@@ -32,24 +32,23 @@ struct D4Header {
     size: u32,
 }
 
-impl D4Header {
-
-    fn to_vec(&mut self) -> Vec<u8> {
+impl From<D4Header> for Vec<u8> {
+    fn from(header: D4Header) -> Self {
         let mut to_return: Vec<u8> = Vec::new();
-        to_return.push(self.protocol_version);
-        to_return.push(self.packet_type);
-        to_return.extend_from_slice(&self.uuid);
-        let mut timestamp = bincode::serialize(&self.timestamp).unwrap();
+        to_return.push(header.protocol_version);
+        to_return.push(header.packet_type);
+        to_return.extend_from_slice(&header.uuid);
+        let mut timestamp = bincode::serialize(&header.timestamp).unwrap();
         to_return.append(&mut timestamp);
-        to_return.extend_from_slice(&self.hmac);
-        let mut size = bincode::serialize(&self.size).unwrap();
+        to_return.extend_from_slice(&header.hmac);
+        let mut size = bincode::serialize(&header.size).unwrap();
         to_return.append(&mut size);
         to_return
     }
 }
 
 impl From<Vec<u8>> for D4Header {
-    fn from(data: Vec<u8> ) -> Self {
+    fn from(data: Vec<u8>) -> Self {
         D4Header {
             protocol_version: data[0],
             packet_type: data[1],
@@ -62,15 +61,22 @@ impl From<Vec<u8>> for D4Header {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct D4Message {
     header: D4Header,
     body: Vec<u8>,
 }
 
+impl From<D4Message> for Vec<u8> {
+    fn from(message: D4Message) -> Self {
+        let mut to_return: Vec<u8> = Vec::from(message.header);
+        to_return.append(&mut message.body.to_owned());
+        to_return
+    }
+}
 
 impl From<Vec<u8>> for D4Message {
-    fn from(data: Vec<u8> ) -> Self {
+    fn from(data: Vec<u8>) -> Self {
         D4Message {
             header: data[0..62].to_vec().into(),
             body: data[62..].to_vec().into()
@@ -81,17 +87,10 @@ impl From<Vec<u8>> for D4Message {
 impl D4Message {
     fn compute_hmac(&mut self, secret_key: &[u8]) {
         let mut mac = HmacSha256::new_from_slice(secret_key).expect("HMAC can take key of any size");
-        mac.update(self.to_vec().as_slice());
+        mac.update(Vec::from(self.to_owned()).as_slice());
         let result = mac.finalize();
         self.header.hmac = result.into_bytes().into();
     }
-
-    fn to_vec(&mut self) -> Vec<u8> {
-        let mut to_return: Vec<u8> = self.header.to_vec();
-        to_return.append(&mut self.body.to_owned());
-        to_return
-    }
-
 }
 
 fn create_message(protocol_version: u8, packet_type: u8, sensor_uuid: &[u8; 16],
@@ -162,20 +161,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     handle.read_to_end(&mut stdin_message)?;
 
-    let mut message = create_message(protocol_version, packet_type,
+    let message = create_message(protocol_version, packet_type,
                                  sensor_uuid.as_bytes(),
                                  key.as_bytes(), stdin_message)?;
-    let encoded: Vec<u8> = message.to_vec();
+    // println!("{:?}", message);
+    let encoded: Vec<u8> = Vec::from(message);
 
-    //println!("{:?}", message);
-    println!("{:?}", encoded);
+    //println!("{:?}", encoded);
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
     handle.write_all(encoded.as_slice())?;
 
-    let decoded: D4Message = encoded.into();
-    println!("{:?}", decoded);
+    let decoded: D4Message = D4Message::from(encoded);
+    //println!("{:?}", decoded);
 
     Ok(())
 }
