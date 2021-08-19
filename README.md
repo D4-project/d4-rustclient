@@ -23,3 +23,13 @@ $  echo "blahh" | cargo run -- -c <config_directory> | xxd
 00000030: c1df be41 9d5e d04d 31f9 0600 0000 626c  ...A.^.M1.....bl
 00000040: 6168 680a                                ahh.
 ```
+
+# Python bindings
+
+```
+poetry install
+python ./setup.py develop
+nosetests-3.4 tests/tests_python.py
+```
+
+Have a look at `tests/tests_python.py` for a quick example.

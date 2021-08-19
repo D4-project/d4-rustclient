@@ -12,7 +12,12 @@ hmac = "0.11.0"
 clap = "2.33.3"
 bincode = "1.3.3"
 
+[dependencies.pyo3]
+version = "0.14.2"
+features = ["extension-module"]
+
 [lib]
 name = "d4message"
 path = "src/lib.rs"
 test = true
+crate-type = ["cdylib", "rlib"]
