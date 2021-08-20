@@ -18,5 +18,10 @@ jobs:
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
-    - name: Run tests
+    - name: Run Rust tests
       run: cargo test --verbose
+    - name: Run Python tests
+      run: |
+        poetry install
+        python ./setup.py develop
+        nosetests-3.4 tests/tests_python.py
