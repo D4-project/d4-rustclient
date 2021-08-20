@@ -28,8 +28,18 @@ $  echo "blahh" | cargo run -- -c <config_directory> | xxd
 
 ```
 poetry install
-python ./setup.py develop
-nosetests-3.4 tests/tests_python.py
+poetry run nosetests-3.4 tests/tests_python.py
 ```
 
 Have a look at `tests/tests_python.py` for a quick example.
+
+# Python script
+
+```
+$ (git::main) echo -n blah | d4client-rust | xxd
+00000000: 0101 cd98 0d75 dcf1 47da bb60 aabe 94fe  .....u..G..`....
+00000010: a6b2 d37a 1f61 0000 0000 e6d1 f434 d8da  ...z.a.......4..
+00000020: a2e0 5ca1 4dca 5407 ffd4 c45d 0522 273a  ..\.M.T....]."':
+00000030: fc8c b728 a24b 1b61 f06a 0400 0000 626c  ...(.K.a.j....bl
+00000040: 6168                                     ah
+```
