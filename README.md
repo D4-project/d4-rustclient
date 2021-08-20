@@ -28,6 +28,7 @@ $  echo "blahh" | cargo run -- -c <config_directory> | xxd
 
 ```
 poetry install
+poetry run python ./setup.py develop
 poetry run nosetests-3.4 tests/tests_python.py
 ```
 
