@@ -50,17 +50,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     let packet_type = t.parse::<u8>().unwrap();
 
     let destination = read_config_file(&config_dir_path.join("destination"));
+    let source = read_config_file(&config_dir_path.join("source"));
 
+    let message = match source {
+        _ if source == "stdin" => {
+            let mut stdin_message = Vec::new();
+            let stdin = io::stdin();
+            let mut handle = stdin.lock();
+            handle.read_to_end(&mut stdin_message)?;
 
-    let mut stdin_message = Vec::new();
-    let stdin = io::stdin();
-    let mut handle = stdin.lock();
+            D4Message::new(protocol_version, packet_type,
+                           sensor_uuid.as_bytes(),
+                           key.as_bytes(), stdin_message)
+        },
+        _ if source == "stdin_as_d4" => {
+            let mut stdin_message = Vec::new();
+            let stdin = io::stdin();
+            let mut handle = stdin.lock();
+            handle.read_to_end(&mut stdin_message)?;
+            D4Message::from(stdin_message)
+        },
+        _ => {
+            panic!()
+        }
+    };
 
-    handle.read_to_end(&mut stdin_message)?;
-
-    let message = D4Message::new(protocol_version, packet_type,
-                                 sensor_uuid.as_bytes(),
-                                 key.as_bytes(), stdin_message);
     let encoded: Vec<u8> = Vec::from(message);
 
     match destination {
