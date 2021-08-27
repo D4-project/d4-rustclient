@@ -68,7 +68,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             let stdin = io::stdin();
             let mut handle = stdin.lock();
             handle.read_to_end(&mut stdin_message)?;
-            D4Message::from(stdin_message)
+            let mut message = D4Message::from(stdin_message);
+            if message.validate_hmac(key.as_bytes()) == false {
+                panic!()
+            }
+            message
         },
         _ => {
             panic!()
