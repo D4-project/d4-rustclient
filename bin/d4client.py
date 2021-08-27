@@ -5,6 +5,7 @@ import argparse
 import uuid
 import os
 from pathlib import Path
+import socket
 import sys
 
 from d4message import D4Message
@@ -30,12 +31,20 @@ def main():
         protocol_version = int(_f.read().strip())
     with (args.config_directory / 'type').open() as _f:
         packet_type = int(_f.read().strip())
+    with (args.config_directory / 'destination').open() as _f:
+        destination = _f.read().strip()
 
     stdin_message = sys.stdin.read().encode()
     message = D4Message(protocol_version, packet_type, sensor_uuid.bytes,
                         key.encode(), stdin_message)
 
-    sys.stdout.buffer.write(bytes(message.to_bytes()))
+    if destination == 'stdout':
+        sys.stdout.buffer.write(bytes(message.to_bytes()))
+    else:
+        host, port = destination.split(':')
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((host, int(port)))
+            s.sendall(bytes(message.to_bytes()))
 
 
 if __name__ == '__main__':

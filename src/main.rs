@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fs::File;
+use std::net::TcpStream;
 use std::io::{self, Read, Write};
 use std::path::Path;
 
@@ -48,6 +49,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let t = read_config_file(&config_dir_path.join("type"));
     let packet_type = t.parse::<u8>().unwrap();
 
+    let destination = read_config_file(&config_dir_path.join("destination"));
+
 
     let mut stdin_message = Vec::new();
     let stdin = io::stdin();
@@ -60,10 +63,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                                  key.as_bytes(), stdin_message);
     let encoded: Vec<u8> = Vec::from(message);
 
-
-    let stdout = io::stdout();
-    let mut handle = stdout.lock();
-    handle.write_all(encoded.as_slice())?;
+    match destination {
+        _ if destination == "stdout" => {
+            let stdout = io::stdout();
+            let mut handle = stdout.lock();
+            handle.write_all(encoded.as_slice())?;
+        },
+        destination => {
+            let mut stream = TcpStream::connect(destination)?;
+            stream.write(encoded.as_slice())?;
+        }
+    }
 
     Ok(())
 }
