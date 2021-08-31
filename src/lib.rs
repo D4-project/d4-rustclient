@@ -52,9 +52,9 @@ impl From<D4Header> for [u8; 62] {
         to_return[0] = header.protocol_version;
         to_return[1] = header.packet_type;
         to_return[2..18].clone_from_slice(&header.uuid);
-        to_return[18..26].clone_from_slice(&bincode::serialize(&header.timestamp).unwrap());
+        to_return[18..26].clone_from_slice(&header.timestamp.to_le_bytes());
         to_return[26..58].clone_from_slice(&header.hmac);
-        to_return[58..62].clone_from_slice(&bincode::serialize(&header.size).unwrap());
+        to_return[58..62].clone_from_slice(&header.size.to_le_bytes());
         to_return
     }
 }
@@ -65,9 +65,9 @@ impl From<&[u8]> for D4Header {
             protocol_version: data[0],
             packet_type: data[1],
             uuid: clone_into_array(&data[2..18]),
-            timestamp: bincode::deserialize(&data[18..26]).unwrap(),
+            timestamp: u64::from_le_bytes(clone_into_array(&data[18..26])),
             hmac: clone_into_array(&data[26..58]),
-            size: bincode::deserialize(&data[58..62]).unwrap()
+            size: u32::from_le_bytes(clone_into_array(&data[58..62]))
         }
     }
 }
@@ -104,9 +104,10 @@ impl From<Vec<u8>> for D4Message {
 
 impl From<&[u8]> for D4Message {
     fn from(data: &[u8]) -> Self {
+        let header = D4Header::from(&data[0..62]);
         D4Message {
-            header: D4Header::from(&data[0..62]),
-            body: data[62..].to_vec()
+            header: header,
+            body: data[62..62 + header.size as usize].to_vec()
         }
     }
 }
